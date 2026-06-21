@@ -4,6 +4,19 @@
 #include <Wire.h>
 #include <HapticProtocol.h>
 
+#if !defined(HAPTIC_I2C_ADDRESS) || !defined(HAPTIC_MODULE_KIND)
+#if defined(__INTELLISENSE__) || defined(__clangd__)
+#ifndef HAPTIC_I2C_ADDRESS
+#define HAPTIC_I2C_ADDRESS 0x7F
+#endif
+#ifndef HAPTIC_MODULE_KIND
+#define HAPTIC_MODULE_KIND MODULE_KIND_UNKNOWN
+#endif
+#else
+#error "Pico module firmware must be built with HAPTIC_I2C_ADDRESS and HAPTIC_MODULE_KIND from platformio.ini"
+#endif
+#endif
+
 namespace Haptic {
 
 class PicoModule {
