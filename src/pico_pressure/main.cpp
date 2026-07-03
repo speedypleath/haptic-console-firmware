@@ -3,14 +3,20 @@
 
 using namespace Haptic;
 
-// CALIBRATE: measure these with hardware after the voltage divider is fitted.
-// kZeroAdcCount: 12-bit ADC reading when sensor sees 0 kPa differential
-//                (MPXV7002DP Vout ~2.5 V × voltage-divider ratio, scaled to 3.3 V reference).
-// kAdcPerUnit:   ADC counts per output unit (1 unit = 0.01 kPa).
-// kOverrangeAdc: extra ADC headroom before declaring SENSOR_FAULT (beyond ±2 kPa swing).
-static constexpr int16_t kZeroAdcCount  = 2048;  // placeholder — mid-scale 12-bit
-static constexpr int16_t kAdcPerUnit    = 100;    // placeholder — needs hardware measurement
-static constexpr int16_t kOverrangeAdc  = 300;    // tolerance counts beyond ±2 kPa swing
+// MPX5010DP: gauge pressure sensor, 0–10 kPa range, 5 V supply.
+// Transfer function: Vout = Vs × (0.09 × P + 0.04), P in kPa, Vs = 5 V.
+//   0 kPa  → 0.20 V
+//   10 kPa → 4.70 V
+// A resistive voltage divider is required to keep Vout within the Pico's
+// 3.3 V ADC range (e.g. 33 kΩ / 68 kΩ → ×0.67 ratio).
+//
+// CALIBRATE: measure these constants with hardware once the divider is fitted.
+// kZeroAdcCount: 12-bit ADC count at 0 kPa (0.20 V × divider ratio, ref 3.3 V).
+// kAdcPerKpa:    ADC counts per kPa.
+// kOverrangeAdc: extra ADC headroom above full scale before declaring SENSOR_FAULT.
+static constexpr int16_t kZeroAdcCount = 166;  // placeholder — 0.20 V × 0.67 / 3.3 V × 4095
+static constexpr int16_t kAdcPerKpa    = 376;  // placeholder — needs hardware measurement
+static constexpr int16_t kOverrangeAdc = 200;  // tolerance counts beyond 10 kPa
 
 PicoModule module(HAPTIC_I2C_ADDRESS, HAPTIC_MODULE_KIND);
 
@@ -21,21 +27,24 @@ void setup() {
 }
 
 void loop() {
-  const int16_t raw = (int16_t)analogRead(A0);
+  const int16_t raw   = (int16_t)analogRead(A0);
   const int16_t delta = raw - kZeroAdcCount;
 
-  // Convert to 0.01 kPa units. Range ±200 for ±2 kPa (fits int16_t well).
-  const int16_t pressure = (int32_t)delta * 100 / kAdcPerUnit;
+  // Convert to 0.01 kPa units; 0–1000 spans the full 0–10 kPa range.
+  const int16_t pressure = (int16_t)constrain(
+      (int32_t)delta * 100 / kAdcPerKpa, 0, 32767);
 
-  // Overrange: ADC swing exceeds the ±2 kPa sensor spec plus tolerance.
-  const bool overrange = abs(delta) > (kAdcPerUnit * 200 + kOverrangeAdc);
+  // Fault if ADC is above 10 kPa full scale + tolerance, or implausibly below zero.
+  const bool overrange = raw > kZeroAdcCount + kAdcPerKpa * 10 + kOverrangeAdc
+                      || delta < -kOverrangeAdc;
   const ModuleStatus status = overrange ? MODULE_STATUS_SENSOR_FAULT : MODULE_STATUS_OK;
 
   int16_t values[kMaxPayloadWords] = {};
   values[0] = pressure;
   values[1] = raw;
   values[2] = kZeroAdcCount;
+  Serial.println("pressure=" + String(pressure) + " raw=" + String(raw) + " status=" + String(status));
 
   module.publish(status, values, kMaxPayloadWords);
-  delay(5);
+  delay(20);
 }

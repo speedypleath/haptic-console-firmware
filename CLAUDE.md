@@ -56,7 +56,7 @@ This is a PlatformIO multi-environment firmware workspace. One Teensy 4.0 acts a
 
 - `teensy_master`: polls all three addresses at 10 ms intervals; prints packets over serial. No MIDI/OSC/CV output yet.
 - `pico_loadcell`: publishes dummy `analogRead(A0/A1)` values. HX711 driver not yet written.
-- `pico_pressure`: publishes dummy `analogRead(A0)`. MPXV7002DP conditioning stage not yet designed.
+- `pico_pressure`: reads MPX5010DP gauge pressure sensor (0–10 kPa) via A0. Voltage divider conditioning stage not yet designed; calibration constants (`kZeroAdcCount`, `kAdcPerKpa`) are placeholders.
 - `pico_encoder`: polling quadrature decoder on GP14/GP15; position split across `payload[0]` (low word) and `payload[1]` (high word). Interrupt-based decode not yet implemented.
 
 ## Key Constraints

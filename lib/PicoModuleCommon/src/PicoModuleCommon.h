@@ -26,8 +26,10 @@ class PicoModule {
       : address_(address), kind_(kind), irqPin_(irqPin), idPin_(idPin) {}
 
   void begin() {
+#ifndef HAPTIC_DEBUG
     pinMode(irqPin_, OUTPUT);
     digitalWrite(irqPin_, LOW);
+#endif
 
     packet_.protocolVersion = kProtocolVersion;
     packet_.moduleKind = kind_;
@@ -39,13 +41,23 @@ class PicoModule {
     }
     finalizePacket(packet_);
 
+#ifdef HAPTIC_DEBUG
+    while (!Serial) { delay(10); }
+    Serial.print("HAPTIC DEBUG addr=0x");
+    Serial.print(address_, HEX);
+    Serial.print(" kind=");
+    Serial.println(moduleKindName(kind_));
+#else
     instance() = this;
     Wire.begin(address_);
     Wire.onRequest(handleRequestThunk);
+#endif
   }
 
   void publish(ModuleStatus status, const int16_t *values, uint8_t count) {
+#ifndef HAPTIC_DEBUG
     noInterrupts();
+#endif
     packet_.status = status;
     packet_.sequence++;
     packet_.idAdc = readIdAdc();
@@ -53,9 +65,13 @@ class PicoModule {
       packet_.payload[i] = i < count ? values[i] : 0;
     }
     finalizePacket(packet_);
+#ifdef HAPTIC_DEBUG
+    printDebug();
+    delay(100);
+#else
     interrupts();
-
     digitalWrite(irqPin_, HIGH);
+#endif
   }
 
   uint16_t readIdAdc() const {
@@ -63,6 +79,27 @@ class PicoModule {
   }
 
  private:
+#ifdef HAPTIC_DEBUG
+  void printDebug() {
+    Serial.print("kind=");
+    Serial.print(moduleKindName(packet_.moduleKind));
+    Serial.print(" seq=");
+    Serial.print(packet_.sequence);
+    Serial.print(" status=");
+    Serial.print(packet_.status);
+    Serial.print(" idAdc=");
+    Serial.print(packet_.idAdc);
+    for (uint8_t i = 0; i < kMaxPayloadWords; ++i) {
+      Serial.print(" p[");
+      Serial.print(i);
+      Serial.print("]=");
+      Serial.print(packet_.payload[i]);
+    }
+    Serial.print(" csum=0x");
+    Serial.println(packet_.checksum, HEX);
+  }
+#endif
+
   static void handleRequestThunk() {
     if (instance() != nullptr) {
       instance()->handleRequest();
