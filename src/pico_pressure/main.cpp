@@ -21,7 +21,7 @@ static constexpr int16_t kOverrangeAdc = 200;  // tolerance counts beyond 10 kPa
 PicoModule module(HAPTIC_I2C_ADDRESS, HAPTIC_MODULE_KIND);
 
 void setup() {
-  Serial.begin(115200);
+  Serial1.begin(115200);
   analogReadResolution(12);
   module.begin();
 }
@@ -43,7 +43,7 @@ void loop() {
   values[0] = pressure;
   values[1] = raw;
   values[2] = kZeroAdcCount;
-  Serial.println("pressure=" + String(pressure) + " raw=" + String(raw) + " status=" + String(status));
+  Serial1.println("pressure=" + String(pressure) + " raw=" + String(raw) + " status=" + String(status));
 
   module.publish(status, values, kMaxPayloadWords);
   delay(20);

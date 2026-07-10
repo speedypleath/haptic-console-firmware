@@ -1,6 +1,9 @@
 #pragma once
 
+#ifdef ARDUINO
 #include <Arduino.h>
+#endif
+#include <stddef.h>
 #include <stdint.h>
 
 namespace Haptic {

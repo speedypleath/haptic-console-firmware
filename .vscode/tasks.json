@@ -1,0 +1,159 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "PIO: Build (pico_loadcell_debug)",
+            "type": "shell",
+            "command": "pio run -e pico_loadcell_debug",
+            "problemMatcher": []
+        },
+        {
+            "label": "PIO: Build (pico_pressure_debug)",
+            "type": "shell",
+            "command": "pio run -e pico_pressure_debug",
+            "problemMatcher": []
+        },
+        {
+            "label": "PIO: Build (pico_encoder_debug)",
+            "type": "shell",
+            "command": "pio run -e pico_encoder_debug",
+            "problemMatcher": []
+        },
+        {
+            "label": "OpenOCD: Flash (pico_loadcell_debug)",
+            "type": "shell",
+            "command": "openocd -f interface/cmsis-dap.cfg -f target/rp2040.cfg -c \"adapter speed 5000\" -c \"program .pio/build/pico_loadcell_debug/firmware.elf verify exit\"",
+            "dependsOn": [
+                "PIO: Build (pico_loadcell_debug)"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "OpenOCD: Flash (pico_pressure_debug)",
+            "type": "shell",
+            "command": "openocd -f interface/cmsis-dap.cfg -f target/rp2040.cfg -c \"adapter speed 5000\" -c \"program .pio/build/pico_pressure_debug/firmware.elf verify exit\"",
+            "dependsOn": [
+                "PIO: Build (pico_pressure_debug)"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "OpenOCD: Flash (pico_encoder_debug)",
+            "type": "shell",
+            "command": "openocd -f interface/cmsis-dap.cfg -f target/rp2040.cfg -c \"adapter speed 5000\" -c \"program .pio/build/pico_encoder_debug/firmware.elf verify exit\"",
+            "dependsOn": [
+                "PIO: Build (pico_encoder_debug)"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Delay: Wait for probe re-enumeration",
+            "type": "shell",
+            "command": "sleep 1",
+            "problemMatcher": []
+        },
+        {
+            "label": "OpenOCD: GDB Server (picoprobe)",
+            "type": "shell",
+            "command": "openocd -f interface/cmsis-dap.cfg -f target/rp2040.cfg -c \"adapter speed 5000\"",
+            "isBackground": true,
+            "problemMatcher": {
+                "pattern": {
+                    "regexp": "^(?:never_matches)$",
+                    "file": 1,
+                    "location": 1,
+                    "message": 1
+                },
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": "Open On-Chip Debugger",
+                    "endsPattern": "Listening on port 3333 for gdb connections"
+                }
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": true
+            }
+        },
+        {
+            "label": "OpenOCD: Stop GDB Server",
+            "type": "shell",
+            "command": "pkill -f 'openocd -f interface/cmsis-dap.cfg' || true",
+            "problemMatcher": []
+        },
+        {
+            "label": "Kill All: Debug Processes",
+            "type": "shell",
+            "command": "pkill -f 'openocd -f interface/cmsis-dap.cfg' || true; pkill -f 'pyocd gdbserver' || true; pkill -f 'arm-none-eabi-gdb' || true",
+            "problemMatcher": []
+        },
+        {
+            "label": "Pre-Debug: pico_pressure (cortex-debug)",
+            "dependsOn": [
+                "Kill All: Debug Processes",
+                "PIO: Build (pico_pressure_debug)"
+            ],
+            "dependsOrder": "sequence",
+            "problemMatcher": []
+        },
+        {
+            "label": "Debug Prep: pico_loadcell",
+            "dependsOn": [
+                "Kill All: Debug Processes",
+                "OpenOCD: Flash (pico_loadcell_debug)",
+                "Delay: Wait for probe re-enumeration",
+                "OpenOCD: GDB Server (picoprobe)"
+            ],
+            "dependsOrder": "sequence",
+            "problemMatcher": []
+        },
+        {
+            "label": "Debug Prep: pico_pressure",
+            "dependsOn": [
+                "Kill All: Debug Processes",
+                "OpenOCD: Flash (pico_pressure_debug)",
+                "Delay: Wait for probe re-enumeration",
+                "OpenOCD: GDB Server (picoprobe)"
+            ],
+            "dependsOrder": "sequence",
+            "problemMatcher": []
+        },
+        {
+            "label": "Debug Prep: pico_encoder",
+            "dependsOn": [
+                "Kill All: Debug Processes",
+                "OpenOCD: Flash (pico_encoder_debug)",
+                "Delay: Wait for probe re-enumeration",
+                "OpenOCD: GDB Server (picoprobe)"
+            ],
+            "dependsOrder": "sequence",
+            "problemMatcher": []
+        },
+        {
+            "type": "cppbuild",
+            "label": "C/C++: arm-none-eabi-gcc build active file",
+            "command": "/Users/speedypleath/.platformio/packages/toolchain-gccarmnoneeabi-teensy/bin/arm-none-eabi-gcc",
+            "args": [
+                "-fdiagnostics-color=always",
+                "-g",
+                "${file}",
+                "-o",
+                "${fileDirname}/${fileBasenameNoExtension}",
+                "-mthumb",
+                "-mcpu=cortex-m7",
+                "-mfloat-abi=hard",
+                "-mfpu=fpv5-d16",
+                ""
+            ],
+            "options": {
+                "cwd": "${fileDirname}"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": "build",
+            "detail": "compiler: /Users/speedypleath/.platformio/packages/toolchain-gccarmnoneeabi-teensy/bin/arm-none-eabi-gcc"
+        }
+    ]
+}

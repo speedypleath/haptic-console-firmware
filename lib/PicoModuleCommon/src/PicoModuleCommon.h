@@ -42,7 +42,7 @@ class PicoModule {
     finalizePacket(packet_);
 
 #ifdef HAPTIC_DEBUG
-    while (!Serial) { delay(10); }
+    for (uint32_t start = millis(); !Serial && millis() - start < 2000; ) { delay(10); }
     Serial.print("HAPTIC DEBUG addr=0x");
     Serial.print(address_, HEX);
     Serial.print(" kind=");
