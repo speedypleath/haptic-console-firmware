@@ -1,22 +1,12 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <HapticProtocol.h>
+#include <TeensyMasterCore.h>
 
 using namespace Haptic;
+namespace TM = Haptic::TeensyMaster;
 
-static constexpr uint8_t  kModuleAddresses[] = {0x20, 0x21, 0x22};
-static constexpr uint8_t  kNumModules        = sizeof(kModuleAddresses);
-static constexpr uint32_t kPollIntervalMs    = 10;
-static constexpr uint32_t kModuleTimeoutMs   = 200;
-static constexpr uint8_t  kMissLimit         = 5;
-
-struct ModuleState {
-  bool     active       = false;
-  uint32_t lastSuccessMs = 0;
-  uint8_t  missCount    = 0;
-};
-
-static ModuleState states[kNumModules];
+static TM::ModuleState states[TM::kNumModules];
 static uint32_t    lastPollMs  = 0;
 static bool        debugOutput = true;
 
@@ -29,7 +19,9 @@ bool readModule(uint8_t address, ModulePacket &packet) {
   }
   uint8_t *dst = reinterpret_cast<uint8_t *>(&packet);
   for (uint8_t i = 0; i < expected; ++i) dst[i] = Wire.read();
-  return packet.protocolVersion == kProtocolVersion && validatePacket(packet);
+  return TM::decodePacketBytes(reinterpret_cast<const uint8_t *>(&packet),
+                               sizeof(packet), packet) ==
+         TM::PacketDecodeResult::Ok;
 }
 
 void printPacket(uint8_t address, const ModulePacket &packet) {
@@ -41,24 +33,46 @@ void printPacket(uint8_t address, const ModulePacket &packet) {
   Serial.print(packet.sequence);
   Serial.print(" idAdc=");
   Serial.print(packet.idAdc);
-  Serial.print(" values=");
-  for (uint8_t i = 0; i < kMaxPayloadWords; ++i) {
-    Serial.print(packet.payload[i]);
-    if (i + 1 < kMaxPayloadWords) Serial.print(",");
+  if (packet.moduleKind == MODULE_KIND_LOADCELL) {
+    const TM::LoadcellReading reading = TM::parseLoadcellReading(packet);
+    Serial.print(" cellA=");
+    Serial.print(reading.cellA);
+    Serial.print(" cellB=");
+    Serial.print(reading.cellB);
+  } else if (packet.moduleKind == MODULE_KIND_PRESSURE) {
+    const TM::PressureReading reading = TM::parsePressureReading(packet);
+    Serial.print(" pressure_cKpa=");
+    Serial.print(reading.pressureCentikpa);
+    Serial.print(" raw=");
+    Serial.print(reading.rawAdc);
+    Serial.print(" zero=");
+    Serial.print(reading.zeroAdc);
+  } else if (packet.moduleKind == MODULE_KIND_ENCODER) {
+    const TM::EncoderReading reading = TM::parseEncoderReading(packet);
+    Serial.print(" position=");
+    Serial.print(reading.position);
+    Serial.print(" velocity_0.1rpm=");
+    Serial.print(reading.velocityTenthRpm);
+    Serial.print(" direction=");
+    Serial.print(reading.direction);
+  } else {
+    Serial.print(" values=");
+    for (uint8_t i = 0; i < kMaxPayloadWords; ++i) {
+      Serial.print(packet.payload[i]);
+      if (i + 1 < kMaxPayloadWords) Serial.print(",");
+    }
   }
   Serial.println();
 }
 
 void scanModules() {
   Serial.println("Scanning for modules...");
-  for (uint8_t i = 0; i < kNumModules; ++i) {
-    Wire.beginTransmission(kModuleAddresses[i]);
+  for (uint8_t i = 0; i < TM::kNumModules; ++i) {
+    Wire.beginTransmission(TM::kModuleAddresses[i]);
     const bool present = (Wire.endTransmission() == 0);
-    states[i].active = present;
-    states[i].missCount = 0;
-    states[i].lastSuccessMs = millis();
+    TM::recordScanResult(states[i], present, millis());
     Serial.print("  0x");
-    Serial.print(kModuleAddresses[i], HEX);
+    Serial.print(TM::kModuleAddresses[i], HEX);
     Serial.println(present ? " found" : " not found");
   }
 }
@@ -83,26 +97,20 @@ void loop() {
   }
 
   const uint32_t now = millis();
-  if (now - lastPollMs < kPollIntervalMs) return;
+  if (!TM::isPollDue(now, lastPollMs)) return;
   lastPollMs = now;
 
-  for (uint8_t i = 0; i < kNumModules; ++i) {
+  for (uint8_t i = 0; i < TM::kNumModules; ++i) {
     if (!states[i].active) continue;
 
     ModulePacket packet;
-    if (readModule(kModuleAddresses[i], packet)) {
-      states[i].missCount    = 0;
-      states[i].lastSuccessMs = now;
-      if (debugOutput) printPacket(kModuleAddresses[i], packet);
+    if (readModule(TM::kModuleAddresses[i], packet)) {
+      TM::recordReadSuccess(states[i], now);
+      if (debugOutput) printPacket(TM::kModuleAddresses[i], packet);
     } else {
-      if (states[i].missCount < kMissLimit) {
-        states[i].missCount++;
-      }
-      if (states[i].missCount >= kMissLimit &&
-          now - states[i].lastSuccessMs >= kModuleTimeoutMs) {
-        states[i].active = false;
+      if (TM::recordReadFailure(states[i], now)) {
         Serial.print("timeout: 0x");
-        Serial.println(kModuleAddresses[i], HEX);
+        Serial.println(TM::kModuleAddresses[i], HEX);
       }
     }
   }

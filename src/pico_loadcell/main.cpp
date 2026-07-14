@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <HX711_ADC.h>
 #include <PicoModuleCommon.h>
+#include <PicoLoadcellCore.h>
 
 using namespace Haptic;
 
@@ -43,19 +44,21 @@ void loop() {
   lcA.update();
   lcB.update();
 
-  if (lcA.getSignalTimeoutFlag() || lcB.getSignalTimeoutFlag()) {
-    int16_t vals[kMaxPayloadWords] = {};
-    module.publish(MODULE_STATUS_SENSOR_FAULT, vals, kMaxPayloadWords);
+  const ModuleStatus status = PicoLoadcell::statusForTimeoutFlags(
+      lcA.getSignalTimeoutFlag(), lcB.getSignalTimeoutFlag());
+  if (status != MODULE_STATUS_OK) {
+    int16_t values[kMaxPayloadWords] = {};
+    module.publish(status, values, kMaxPayloadWords);
     delay(5);
     return;
   }
 
-  int16_t values[kMaxPayloadWords] = {};
   // getData() returns calFactor-scaled float. Clamp to int16 range.
   // With kCalFactor=1.0 the raw 24-bit counts will saturate until calibration is set.
-  values[0] = (int16_t)constrain((int32_t)lcA.getData(), -32768, 32767);
-  values[1] = (int16_t)constrain((int32_t)lcB.getData(), -32768, 32767);
+  int16_t values[kMaxPayloadWords] = {};
+  PicoLoadcell::buildPayload(static_cast<int32_t>(lcA.getData()),
+                             static_cast<int32_t>(lcB.getData()), values);
 
-  module.publish(MODULE_STATUS_OK, values, kMaxPayloadWords);
+  module.publish(status, values, kMaxPayloadWords);
   delay(5);
 }

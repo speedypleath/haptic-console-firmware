@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <PicoModuleCommon.h>
+#include <PicoEncoderCore.h>
 
 using namespace Haptic;
 
@@ -14,24 +15,13 @@ using namespace Haptic;
 //   before connecting to the Pico.
 static constexpr uint8_t  kEncoderAPin    = 14;
 static constexpr uint8_t  kEncoderBPin    = 15;
-static constexpr int32_t  kPulsesPerRev   = 600;
-static constexpr int32_t  kCountsPerRev   = kPulsesPerRev * 4;  // 2400
-
-// Full quadrature decode table: index = (lastState << 2) | newState.
-// +1 = CW, -1 = CCW, 0 = invalid or no change.
-static const int8_t kQuadTable[16] = {
-    0,  1, -1,  0,
-   -1,  0,  0,  1,
-    1,  0,  0, -1,
-    0, -1,  1,  0,
-};
 
 static volatile int32_t encoderPosition  = 0;
 static volatile uint8_t lastEncoderState = 0;
 
 void encoderISR() {
   const uint8_t s = (digitalRead(kEncoderAPin) << 1) | digitalRead(kEncoderBPin);
-  encoderPosition += kQuadTable[(lastEncoderState << 2) | s];
+  encoderPosition += PicoEncoder::quadratureDelta(lastEncoderState, s);
   lastEncoderState = s;
 }
 
@@ -40,6 +30,7 @@ PicoModule module(HAPTIC_I2C_ADDRESS, HAPTIC_MODULE_KIND);
 static int32_t  prevPosition      = 0;
 static uint32_t prevTimeMs        = 0;
 static int16_t  velocityTenthRpm  = 0;  // 0.1 RPM units
+static int16_t  direction         = 0;  // -1 = reverse, 0 = stopped/no change, +1 = forward
 
 void setup() {
   Serial.begin(115200);
@@ -63,20 +54,16 @@ void loop() {
   // At 10 RPM this yields ~20 counts per window — sufficient resolution.
   const uint32_t now = millis();
   const uint32_t dt  = now - prevTimeMs;
-  if (dt >= 50) {
+  if (PicoEncoder::shouldUpdateVelocity(dt)) {
     const int32_t delta       = pos - prevPosition;
-    const int32_t countsPerSec = (delta * 1000L) / (int32_t)dt;
-    // 0.1 RPM = counts/sec × 60 × 10 / kCountsPerRev
-    const int32_t tenthRpm    = (countsPerSec * 600L) / kCountsPerRev;
-    velocityTenthRpm = (int16_t)constrain(tenthRpm, -32768, 32767);
+    velocityTenthRpm = PicoEncoder::velocityTenthRpmFromDelta(delta, dt);
+    direction = PicoEncoder::directionFromDelta(delta);
     prevPosition = pos;
     prevTimeMs   = now;
   }
 
   int16_t values[kMaxPayloadWords] = {};
-  values[0] = (int16_t)(pos & 0xFFFF);           // position low word
-  values[1] = (int16_t)((pos >> 16) & 0xFFFF);   // position high word
-  values[2] = velocityTenthRpm;                   // 0.1 RPM, signed
+  PicoEncoder::buildPayload(pos, velocityTenthRpm, direction, values);
 
   module.publish(MODULE_STATUS_OK, values, kMaxPayloadWords);
   delay(1);

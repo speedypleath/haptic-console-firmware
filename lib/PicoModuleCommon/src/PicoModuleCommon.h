@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <HapticProtocol.h>
+#include <PicoModuleCore.h>
 
 #if !defined(HAPTIC_I2C_ADDRESS) || !defined(HAPTIC_MODULE_KIND)
 #if defined(__INTELLISENSE__) || defined(__clangd__)
@@ -31,15 +32,7 @@ class PicoModule {
     digitalWrite(irqPin_, LOW);
 #endif
 
-    packet_.protocolVersion = kProtocolVersion;
-    packet_.moduleKind = kind_;
-    packet_.status = MODULE_STATUS_BOOTING;
-    packet_.sequence = 0;
-    packet_.idAdc = readIdAdc();
-    for (uint8_t i = 0; i < kMaxPayloadWords; ++i) {
-      packet_.payload[i] = 0;
-    }
-    finalizePacket(packet_);
+    PicoCore::initializePacket(packet_, kind_, readIdAdc());
 
 #ifdef HAPTIC_DEBUG
     for (uint32_t start = millis(); !Serial && millis() - start < 2000; ) { delay(10); }
@@ -58,13 +51,7 @@ class PicoModule {
 #ifndef HAPTIC_DEBUG
     noInterrupts();
 #endif
-    packet_.status = status;
-    packet_.sequence++;
-    packet_.idAdc = readIdAdc();
-    for (uint8_t i = 0; i < kMaxPayloadWords; ++i) {
-      packet_.payload[i] = i < count ? values[i] : 0;
-    }
-    finalizePacket(packet_);
+    PicoCore::publishPacket(packet_, status, readIdAdc(), values, count);
 #ifdef HAPTIC_DEBUG
     printDebug();
     delay(100);
