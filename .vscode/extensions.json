@@ -2,6 +2,8 @@
     // See http://go.microsoft.com/fwlink/?LinkId=827846
     // for the documentation about the extensions.json format
     "recommendations": [
+        "hbenl.vscode-test-explorer",
+        "ms-vscode.test-adapter-converter",
         "platformio.platformio-ide"
     ],
     "unwantedRecommendations": [

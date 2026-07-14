@@ -50,11 +50,37 @@ pio run -e pico_loadcell
 
 ## Host Unit Tests
 
-Run Teensy master logic tests without Teensy hardware:
+Run host-side logic tests without Teensy or Pico hardware:
 
 ```bash
 pio test -e native_test
 ```
+
+Embedded firmware environments set `test_ignore = *`, so PlatformIO will not
+try to upload/run these host tests on Teensy or Pico boards.
+
+In VS Code, use `Terminal > Run Test Task...` and choose
+`PIO: Test (native_test)`. This repo also recommends Test Explorer extensions:
+
+- `hbenl.vscode-test-explorer` for the Test Explorer UI.
+- `ms-vscode.test-adapter-converter` as the bridge from the Test Explorer API
+  into VS Code's native Testing UI.
+
+The reliable runner remains `pio test -e native_test`. The converter does not
+run PlatformIO tests directly; it only exposes tests from Test Explorer
+API-compatible providers in VS Code's native Testing tab. If the Testing tab
+still shows no tests, use the configured VS Code test task or PlatformIO's
+Project Tasks view.
+
+For native VS Code Testing tab integration, this repo includes a local extension
+under `tools/vscode-platformio-unity-test-provider`. Install it from VS Code via:
+
+1. `Terminal > Run Task...`
+2. `VS Code Extension: Install PlatformIO Unity Test Provider`
+3. Reload the VS Code window.
+
+After reload, the Testing tab should show `PlatformIO Unity` tests discovered
+from `RUN_TEST(...)` calls in `test/**/test_main.cpp`.
 
 ## Upload
 

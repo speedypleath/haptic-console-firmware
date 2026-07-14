@@ -2,6 +2,77 @@
     "version": "2.0.0",
     "tasks": [
         {
+            "label": "PIO: Test (native_test)",
+            "type": "shell",
+            "command": "pio test -e native_test",
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": true
+            }
+        },
+        {
+            "label": "PIO: Build (all release)",
+            "type": "shell",
+            "command": "pio run -e teensy_master -e pico_loadcell -e pico_pressure -e pico_encoder",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": true
+            }
+        },
+        {
+            "label": "PIO: Test + Build (host + firmware)",
+            "dependsOn": [
+                "PIO: Test (native_test)",
+                "PIO: Build (all release)"
+            ],
+            "dependsOrder": "sequence",
+            "problemMatcher": []
+        },
+        {
+            "label": "VS Code Extension: Package PlatformIO Unity Test Provider",
+            "type": "shell",
+            "command": "npx @vscode/vsce package --no-dependencies",
+            "options": {
+                "cwd": "${workspaceFolder}/tools/vscode-platformio-unity-test-provider"
+            },
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": true
+            }
+        },
+        {
+            "label": "VS Code Extension: Install PlatformIO Unity Test Provider",
+            "type": "shell",
+            "command": "code --install-extension platformio-unity-test-provider-0.1.0.vsix --force",
+            "options": {
+                "cwd": "${workspaceFolder}/tools/vscode-platformio-unity-test-provider"
+            },
+            "dependsOn": [
+                "VS Code Extension: Package PlatformIO Unity Test Provider"
+            ],
+            "dependsOrder": "sequence",
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": true
+            }
+        },
+        {
             "label": "PIO: Build (pico_loadcell_debug)",
             "type": "shell",
             "command": "pio run -e pico_loadcell_debug",

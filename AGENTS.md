@@ -28,17 +28,44 @@ Serial monitor (115200 baud):
 pio device monitor -b 115200
 ```
 
-There are no automated tests. Validation is done by reading the Teensy serial output and confirming packets arrive with correct checksums and incrementing sequence numbers.
+Run host-side unit tests without hardware:
+```bash
+pio test -e native_test
+```
+
+Embedded firmware environments intentionally set `test_ignore = *`; do not run
+unit tests against Teensy/Pico envs unless hardware-targeted tests are added
+explicitly.
+
+VS Code tasks are configured for:
+- `PIO: Test (native_test)` — default test task.
+- `PIO: Build (all release)` — default build task.
+- `PIO: Test + Build (host + firmware)` — runs tests, then release firmware builds.
+
+The repo recommends `hbenl.vscode-test-explorer` and Microsoft's Test Adapter
+Converter. Because `.vscode/settings.json` is ignored for local machine
+settings, enable `testExplorer.useNativeTesting: true` in your user or
+workspace settings if you want Test Explorer API-compatible providers to surface
+tests in VS Code's native Testing tab. The reliable test command remains
+`pio test -e native_test`; the converter does not run PlatformIO tests directly.
+This repo also includes a local native Testing API extension at
+`tools/vscode-platformio-unity-test-provider`; package/install it with the
+`VS Code Extension: Install PlatformIO Unity Test Provider` task, then reload VS
+Code to see PlatformIO Unity tests in the Testing tab.
+
+Hardware validation is still done by reading the Teensy serial output and confirming packets arrive with correct checksums and incrementing sequence numbers.
 
 ## Architecture
 
-This is a PlatformIO multi-environment firmware workspace. One Teensy 4.0 acts as the I2C master; multiple Raspberry Pi Pico boards act as I2C sensor-preprocessing modules.
+This is a PlatformIO multi-environment firmware workspace. One Teensy 4.1 acts as the I2C master; multiple Raspberry Pi Pico boards act as I2C sensor-preprocessing modules.
 
-**Data flow:** Each Pico reads its sensor(s), builds a `ModulePacket`, and holds it ready. The Teensy polls every 10 ms, reads 19 bytes from each known I2C address, validates the protocol version and XOR checksum, and prints the result over serial.
+**Data flow:** Each Pico reads its sensor(s), builds a `ModulePacket`, and holds it ready. The Teensy polls every 10 ms, reads 19 bytes from each known I2C address, validates the protocol version and XOR checksum, parses the module-specific payload, and prints the result over serial.
 
 **Shared libraries in `lib/`:**
 - `HapticProtocol`: defines `ModulePacket` (19 bytes, packed), `ModuleKind`, `ModuleStatus`, `finalizePacket()`, and `validatePacket()`. Used by both Teensy and Pico targets.
 - `PicoModuleCommon`: `PicoModule` class that wraps `Wire` in I2C target mode, handles `onRequest` ISR, and pulses the `IRQ` pin after `publish()`. All Pico `main.cpp` files instantiate one `PicoModule` and call `publish()` in their loop.
+- `TeensyMasterCore`: host-testable Teensy master packet decode, polling state, timeout handling, and module-specific payload parsing.
+- `PicoModuleCore`, `PicoLoadcellCore`, `PicoPressureCore`, `PicoEncoderCore`: host-testable Pico packet publishing and module-specific payload/status logic.
 
 **I2C addresses** are set per-environment via `-D HAPTIC_I2C_ADDRESS` compile flags: `0x20` (loadcell), `0x21` (pressure), `0x22` (encoder).
 
@@ -54,10 +81,10 @@ This is a PlatformIO multi-environment firmware workspace. One Teensy 4.0 acts a
 
 ## Current State of Each Module
 
-- `teensy_master`: polls all three addresses at 10 ms intervals; prints packets over serial. No MIDI/OSC/CV output yet.
-- `pico_loadcell`: publishes dummy `analogRead(A0/A1)` values. HX711 driver not yet written.
+- `teensy_master`: polls all three addresses at 10 ms intervals; validates and parses packets; prints named module readings over serial. No MIDI/OSC/CV output yet.
+- `pico_loadcell`: reads two HX711-backed load cells, clamps values to `int16_t`, and reports `SENSOR_FAULT` on HX711 signal timeout. Real calibration is still required.
 - `pico_pressure`: reads MPX5010DP gauge pressure sensor (0–10 kPa) via A0. Voltage divider conditioning stage not yet designed; calibration constants (`kZeroAdcCount`, `kAdcPerKpa`) are placeholders.
-- `pico_encoder`: polling quadrature decoder on GP14/GP15; position split across `payload[0]` (low word) and `payload[1]` (high word). Interrupt-based decode not yet implemented.
+- `pico_encoder`: interrupt-based quadrature decoder on GP14/GP15; publishes position, velocity in 0.1 RPM units, and direction (`-1`, `0`, `1`).
 
 ## Key Constraints
 

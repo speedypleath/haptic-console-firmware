@@ -1,0 +1,41 @@
+{
+  "name": "platformio-unity-test-provider",
+  "displayName": "PlatformIO Unity Test Provider",
+  "description": "Discovers PlatformIO Unity RUN_TEST cases and runs pio test from VS Code's Testing tab.",
+  "version": "0.1.0",
+  "publisher": "haptic-console",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Testing"
+  ],
+  "activationEvents": [
+    "workspaceContains:platformio.ini",
+    "onStartupFinished"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "platformioUnityTests.refresh",
+        "title": "PlatformIO Unity Tests: Refresh"
+      }
+    ],
+    "configuration": {
+      "title": "PlatformIO Unity Tests",
+      "properties": {
+        "platformioUnityTests.environment": {
+          "type": "string",
+          "default": "native_test",
+          "description": "PlatformIO environment used for host-side Unity tests."
+        },
+        "platformioUnityTests.command": {
+          "type": "string",
+          "default": "pio",
+          "description": "PlatformIO command executable."
+        }
+      }
+    }
+  }
+}
