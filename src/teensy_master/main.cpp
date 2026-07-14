@@ -9,8 +9,7 @@ namespace TM = Haptic::TeensyMaster;
 static TM::ModuleState states[TM::kNumModules];
 static uint32_t    lastPollMs  = 0;
 static bool        debugOutput = true;
-static uint8_t     lastMidiValues[128] = {};
-static bool        hasMidiValue[128] = {};
+static TM::MidiControlChangeCache midiCache;
 
 bool readModule(uint8_t address, ModulePacket &packet) {
   const uint8_t expected = sizeof(ModulePacket);
@@ -73,10 +72,7 @@ void sendMidiForPacket(const ModulePacket &packet) {
   for (uint8_t i = 0; i < count; ++i) {
     const uint8_t control = changes[i].control;
     const uint8_t value = changes[i].value;
-    if (control >= 128) continue;
-    if (hasMidiValue[control] && lastMidiValues[control] == value) continue;
-    hasMidiValue[control] = true;
-    lastMidiValues[control] = value;
+    if (!TM::shouldSendMidiControlChange(midiCache, control, value)) continue;
 #if defined(USB_MIDI) || defined(USB_MIDI_SERIAL)
     usbMIDI.sendControlChange(control, value, TM::kMidiDefaultChannel);
 #endif

@@ -266,6 +266,22 @@ void test_midi_changes_ignore_fault_packets() {
   TEST_ASSERT_EQUAL_UINT8(0, TM::midiChangesForPacket(packet, changes, 3));
 }
 
+void test_midi_control_change_cache_sends_initial_and_changed_values() {
+  TM::MidiControlChangeCache cache{};
+
+  TEST_ASSERT_TRUE(TM::shouldSendMidiControlChange(
+      cache, TM::MIDI_CC_PNEUMATIC_PRESSURE, 64));
+  TEST_ASSERT_FALSE(TM::shouldSendMidiControlChange(
+      cache, TM::MIDI_CC_PNEUMATIC_PRESSURE, 64));
+  TEST_ASSERT_TRUE(TM::shouldSendMidiControlChange(
+      cache, TM::MIDI_CC_PNEUMATIC_PRESSURE, 65));
+
+  // Caches are independent for each submodule's controller number.
+  TEST_ASSERT_TRUE(TM::shouldSendMidiControlChange(
+      cache, TM::MIDI_CC_SPRING_TENSION, 64));
+  TEST_ASSERT_FALSE(TM::shouldSendMidiControlChange(cache, 128, 64));
+}
+
 int main(int argc, char **argv) {
   (void)argc;
   (void)argv;
@@ -290,5 +306,6 @@ int main(int argc, char **argv) {
   RUN_TEST(test_midi_changes_for_pressure_packet);
   RUN_TEST(test_midi_changes_for_encoder_packet);
   RUN_TEST(test_midi_changes_ignore_fault_packets);
+  RUN_TEST(test_midi_control_change_cache_sends_initial_and_changed_values);
   return UNITY_END();
 }

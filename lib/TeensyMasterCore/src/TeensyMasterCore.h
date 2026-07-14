@@ -62,6 +62,13 @@ struct MidiControlChange {
   uint8_t value = 0;
 };
 
+// Tracks the last transmitted value for each MIDI 1.0 controller. Keeping this
+// policy separate from the USB transport makes it usable by host-side tests.
+struct MidiControlChangeCache {
+  uint8_t values[128] = {};
+  bool hasValue[128] = {};
+};
+
 enum class PacketDecodeResult : uint8_t {
   Ok,
   WrongLength,
@@ -181,6 +188,17 @@ inline uint8_t mapPressureToMidi(int16_t pressureCentikpa) {
 
 inline uint8_t loadcellValueToMidi(int16_t value) {
   return mapSignedInt16ToMidi(value);
+}
+
+// Returns true only when a valid controller value differs from the last value
+// accepted for transmission. A true result also records the supplied value.
+inline bool shouldSendMidiControlChange(MidiControlChangeCache &cache,
+                                        uint8_t control, uint8_t value) {
+  if (control >= 128) return false;
+  if (cache.hasValue[control] && cache.values[control] == value) return false;
+  cache.hasValue[control] = true;
+  cache.values[control] = value;
+  return true;
 }
 
 inline uint8_t midiChangesForPacket(const ModulePacket &packet,
