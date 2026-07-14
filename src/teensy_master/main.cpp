@@ -9,6 +9,8 @@ namespace TM = Haptic::TeensyMaster;
 static TM::ModuleState states[TM::kNumModules];
 static uint32_t    lastPollMs  = 0;
 static bool        debugOutput = true;
+static uint8_t     lastMidiValues[128] = {};
+static bool        hasMidiValue[128] = {};
 
 bool readModule(uint8_t address, ModulePacket &packet) {
   const uint8_t expected = sizeof(ModulePacket);
@@ -65,6 +67,27 @@ void printPacket(uint8_t address, const ModulePacket &packet) {
   Serial.println();
 }
 
+void sendMidiForPacket(const ModulePacket &packet) {
+  TM::MidiControlChange changes[3] = {};
+  const uint8_t count = TM::midiChangesForPacket(packet, changes, 3);
+  for (uint8_t i = 0; i < count; ++i) {
+    const uint8_t control = changes[i].control;
+    const uint8_t value = changes[i].value;
+    if (control >= 128) continue;
+    if (hasMidiValue[control] && lastMidiValues[control] == value) continue;
+    hasMidiValue[control] = true;
+    lastMidiValues[control] = value;
+#if defined(USB_MIDI) || defined(USB_MIDI_SERIAL)
+    usbMIDI.sendControlChange(control, value, TM::kMidiDefaultChannel);
+#endif
+  }
+#if defined(USB_MIDI) || defined(USB_MIDI_SERIAL)
+  while (usbMIDI.read()) {
+    // Drain inbound USB MIDI so host-side buffers do not accumulate.
+  }
+#endif
+}
+
 void scanModules() {
   Serial.println("Scanning for modules...");
   for (uint8_t i = 0; i < TM::kNumModules; ++i) {
@@ -106,6 +129,7 @@ void loop() {
     ModulePacket packet;
     if (readModule(TM::kModuleAddresses[i], packet)) {
       TM::recordReadSuccess(states[i], now);
+      sendMidiForPacket(packet);
       if (debugOutput) printPacket(TM::kModuleAddresses[i], packet);
     } else {
       if (TM::recordReadFailure(states[i], now)) {

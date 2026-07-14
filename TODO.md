@@ -43,7 +43,7 @@
 - [x] Add module discovery scan.
 - [x] Add per-module timeout/fault state.
 - [x] Add readable serial debug output toggle.
-- [ ] Add MIDI mapping for first load-cell gesture.
+- [x] Add initial USB MIDI CC mapping for load cell, pressure, and encoder readings.
 - [ ] Add OSC output after basic MIDI behavior works.
 - [ ] Add CV/Gate bridge logic later, after sensor packets are stable.
 

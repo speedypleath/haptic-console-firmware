@@ -69,6 +69,8 @@ This is a PlatformIO multi-environment firmware workspace. One Teensy 4.1 acts a
 
 **I2C addresses** are set per-environment via `-D HAPTIC_I2C_ADDRESS` compile flags: `0x20` (loadcell), `0x21` (pressure), `0x22` (encoder).
 
+**MIDI CC mapping** is defined in `TeensyMasterCore`: CC 1 flywheel velocity, 2 flywheel direction, 3 pneumatic pressure, 4 spring tension, 5 spring acoustic, 6 lean total, 7 lean balance, 8 matrix centroid X, 9 matrix centroid Y, 10 matrix pressure, 11 joystick 1 X, 12 joystick 1 Y, 13 joystick 2 X, 14 joystick 2 Y. Current firmware emits CCs 1–5 from the available modules and reserves 6–14.
+
 **Packet layout** (`ModulePacket`, 19 bytes, little-endian):
 - bytes 0–3: `protocolVersion`, `moduleKind`, `status`, `sequence`
 - bytes 4–5: `idAdc` (ADC reading of the `ID/ADDR` pin — static identity hint)

@@ -179,6 +179,93 @@ void test_parse_encoder_payload_reconstructs_signed_position() {
   TEST_ASSERT_EQUAL_INT16(-1, reading.direction);
 }
 
+void test_midi_cc_numbers_match_ui_mapping() {
+  TEST_ASSERT_EQUAL_UINT8(1, TM::MIDI_CC_FLYWHEEL_VELOCITY);
+  TEST_ASSERT_EQUAL_UINT8(2, TM::MIDI_CC_FLYWHEEL_DIRECTION);
+  TEST_ASSERT_EQUAL_UINT8(3, TM::MIDI_CC_PNEUMATIC_PRESSURE);
+  TEST_ASSERT_EQUAL_UINT8(4, TM::MIDI_CC_SPRING_TENSION);
+  TEST_ASSERT_EQUAL_UINT8(5, TM::MIDI_CC_SPRING_ACOUSTIC);
+  TEST_ASSERT_EQUAL_UINT8(6, TM::MIDI_CC_LEAN_TOTAL);
+  TEST_ASSERT_EQUAL_UINT8(7, TM::MIDI_CC_LEAN_BALANCE);
+  TEST_ASSERT_EQUAL_UINT8(8, TM::MIDI_CC_MATRIX_CENTROID_X);
+  TEST_ASSERT_EQUAL_UINT8(9, TM::MIDI_CC_MATRIX_CENTROID_Y);
+  TEST_ASSERT_EQUAL_UINT8(10, TM::MIDI_CC_MATRIX_PRESSURE);
+  TEST_ASSERT_EQUAL_UINT8(11, TM::MIDI_CC_JOYSTICK_1_X);
+  TEST_ASSERT_EQUAL_UINT8(12, TM::MIDI_CC_JOYSTICK_1_Y);
+  TEST_ASSERT_EQUAL_UINT8(13, TM::MIDI_CC_JOYSTICK_2_X);
+  TEST_ASSERT_EQUAL_UINT8(14, TM::MIDI_CC_JOYSTICK_2_Y);
+}
+
+void test_midi_scaling_helpers() {
+  TEST_ASSERT_EQUAL_UINT8(0, TM::mapPressureToMidi(0));
+  TEST_ASSERT_EQUAL_UINT8(64, TM::mapPressureToMidi(500));
+  TEST_ASSERT_EQUAL_UINT8(127, TM::mapPressureToMidi(1000));
+  TEST_ASSERT_EQUAL_UINT8(127, TM::mapPressureToMidi(2000));
+
+  TEST_ASSERT_EQUAL_UINT8(0, TM::mapVelocityToMidi(0));
+  TEST_ASSERT_EQUAL_UINT8(64, TM::mapVelocityToMidi(300));
+  TEST_ASSERT_EQUAL_UINT8(64, TM::mapVelocityToMidi(-300));
+  TEST_ASSERT_EQUAL_UINT8(127, TM::mapVelocityToMidi(600));
+
+  TEST_ASSERT_EQUAL_UINT8(0, TM::mapDirectionToMidi(-1));
+  TEST_ASSERT_EQUAL_UINT8(64, TM::mapDirectionToMidi(0));
+  TEST_ASSERT_EQUAL_UINT8(127, TM::mapDirectionToMidi(1));
+}
+
+void test_midi_changes_for_loadcell_packet() {
+  ModulePacket packet = makePacket(MODULE_KIND_LOADCELL);
+  packet.payload[0] = -32768;
+  packet.payload[1] = 32767;
+  finalizePacket(packet);
+
+  TM::MidiControlChange changes[3] = {};
+  const uint8_t count = TM::midiChangesForPacket(packet, changes, 3);
+
+  TEST_ASSERT_EQUAL_UINT8(2, count);
+  TEST_ASSERT_EQUAL_UINT8(TM::MIDI_CC_SPRING_TENSION, changes[0].control);
+  TEST_ASSERT_EQUAL_UINT8(0, changes[0].value);
+  TEST_ASSERT_EQUAL_UINT8(TM::MIDI_CC_SPRING_ACOUSTIC, changes[1].control);
+  TEST_ASSERT_EQUAL_UINT8(127, changes[1].value);
+}
+
+void test_midi_changes_for_pressure_packet() {
+  ModulePacket packet = makePacket(MODULE_KIND_PRESSURE);
+  packet.payload[0] = 500;
+  finalizePacket(packet);
+
+  TM::MidiControlChange changes[3] = {};
+  const uint8_t count = TM::midiChangesForPacket(packet, changes, 3);
+
+  TEST_ASSERT_EQUAL_UINT8(1, count);
+  TEST_ASSERT_EQUAL_UINT8(TM::MIDI_CC_PNEUMATIC_PRESSURE, changes[0].control);
+  TEST_ASSERT_EQUAL_UINT8(64, changes[0].value);
+}
+
+void test_midi_changes_for_encoder_packet() {
+  ModulePacket packet = makePacket(MODULE_KIND_ENCODER);
+  packet.payload[2] = -300;
+  packet.payload[3] = -1;
+  finalizePacket(packet);
+
+  TM::MidiControlChange changes[3] = {};
+  const uint8_t count = TM::midiChangesForPacket(packet, changes, 3);
+
+  TEST_ASSERT_EQUAL_UINT8(2, count);
+  TEST_ASSERT_EQUAL_UINT8(TM::MIDI_CC_FLYWHEEL_VELOCITY, changes[0].control);
+  TEST_ASSERT_EQUAL_UINT8(64, changes[0].value);
+  TEST_ASSERT_EQUAL_UINT8(TM::MIDI_CC_FLYWHEEL_DIRECTION, changes[1].control);
+  TEST_ASSERT_EQUAL_UINT8(0, changes[1].value);
+}
+
+void test_midi_changes_ignore_fault_packets() {
+  ModulePacket packet = makePacket(MODULE_KIND_PRESSURE);
+  packet.status = MODULE_STATUS_SENSOR_FAULT;
+  finalizePacket(packet);
+
+  TM::MidiControlChange changes[3] = {};
+  TEST_ASSERT_EQUAL_UINT8(0, TM::midiChangesForPacket(packet, changes, 3));
+}
+
 int main(int argc, char **argv) {
   (void)argc;
   (void)argv;
@@ -197,5 +284,11 @@ int main(int argc, char **argv) {
   RUN_TEST(test_parse_loadcell_payload);
   RUN_TEST(test_parse_pressure_payload);
   RUN_TEST(test_parse_encoder_payload_reconstructs_signed_position);
+  RUN_TEST(test_midi_cc_numbers_match_ui_mapping);
+  RUN_TEST(test_midi_scaling_helpers);
+  RUN_TEST(test_midi_changes_for_loadcell_packet);
+  RUN_TEST(test_midi_changes_for_pressure_packet);
+  RUN_TEST(test_midi_changes_for_encoder_packet);
+  RUN_TEST(test_midi_changes_ignore_fault_packets);
   return UNITY_END();
 }

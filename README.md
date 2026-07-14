@@ -114,6 +114,63 @@ pio run -e pico_encoder_debug
 - `0x21`: pressure module
 - `0x22`: encoder module
 
+## MIDI Interaction Mapping
+
+The control surface has two independent MIDI interaction lanes. Continuous
+sensor data is sent on MIDI channel 1. The numpad and panel buttons are sent
+as press/release events on MIDI channel 16, so they cannot be mistaken for
+continuous controls.
+
+### Continuous sensor controls
+
+The current USB MIDI 1.0-compatible firmware emits 7-bit Control Change
+messages on channel 1. The CC numbers below are retained for compatibility
+with the existing UI app; they are a Haptic Console mapping, not a claim about
+the standard meanings of those controller numbers.
+
+| CC | Control | Source | MIDI 1.0 range |
+|---:|---|---|---|
+| 1 | `flywheel_velocity` | Encoder velocity magnitude | 0–60.0 RPM mapped to 0–127 |
+| 2 | `flywheel_direction` | Encoder direction | reverse/stopped/forward = 0/64/127 |
+| 3 | `pneumatic_pressure` | Pressure sensor | 0–10.00 kPa mapped to 0–127 |
+| 4 | `spring_tension` | Load cell A | Signed `int16_t` mapped to 0–127 |
+| 5 | `spring_acoustic` | Load cell B | Signed `int16_t` mapped to 0–127 |
+| 6 | `lean_total` | Reserved | — |
+| 7 | `lean_balance` | Reserved | — |
+| 8 | `matrix_centroid_x` | Reserved | — |
+| 9 | `matrix_centroid_y` | Reserved | — |
+| 10 | `matrix_pressure` | Reserved | — |
+| 11 | `joystick_1_x` | Reserved | — |
+| 12 | `joystick_1_y` | Reserved | — |
+| 13 | `joystick_2_x` | Reserved | — |
+| 14 | `joystick_2_y` | Reserved | — |
+
+### Numpad and panel buttons
+
+The control unit's ten numpad keys, eight action buttons, and five control
+buttons use Note On and Note Off messages on channel 16. A press sends Note On
+with velocity 127; release sends Note Off. This preserves momentary-button
+behavior and provides a distinct event for every press.
+
+| Controls | MIDI channel | Note range |
+|---|---:|---|
+| Numpad `0`–`9` | 16 | 36–45, in numeric order |
+| Action buttons `1`–`8` | 16 | 46–53 |
+| Control buttons `1`–`5` | 16 | 54–58 |
+
+Control buttons may also have local functions such as mode, shift, back,
+confirm, or menu. Their local behavior remains deterministic; the matching
+MIDI note is an optional mirror for the UI app or host.
+
+### MIDI 2.0 direction
+
+Native MIDI 2.0 support will preserve this layout on UMP Group 1: channel 1
+will use 32-bit MIDI 2.0 Channel Controller messages for the continuous
+controls, and channel 16 will use MIDI 2.0 Note On/Off messages for panel
+events. The current `USB_MIDI_SERIAL` firmware is a USB MIDI 1.0-compatible
+transport, so it emits the mappings above in MIDI 1.0 form until a USB MIDI
+2.0 UMP transport and endpoint discovery are implemented.
+
 ## Connector Assumptions
 
 The firmware assumes the Haptic Console 8-pin module connector:

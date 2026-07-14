@@ -36,6 +36,32 @@ struct EncoderReading {
   int16_t direction = 0;
 };
 
+enum MidiControl : uint8_t {
+  MIDI_CC_FLYWHEEL_VELOCITY = 1,
+  MIDI_CC_FLYWHEEL_DIRECTION = 2,
+  MIDI_CC_PNEUMATIC_PRESSURE = 3,
+  MIDI_CC_SPRING_TENSION = 4,
+  MIDI_CC_SPRING_ACOUSTIC = 5,
+  MIDI_CC_LEAN_TOTAL = 6,
+  MIDI_CC_LEAN_BALANCE = 7,
+  MIDI_CC_MATRIX_CENTROID_X = 8,
+  MIDI_CC_MATRIX_CENTROID_Y = 9,
+  MIDI_CC_MATRIX_PRESSURE = 10,
+  MIDI_CC_JOYSTICK_1_X = 11,
+  MIDI_CC_JOYSTICK_1_Y = 12,
+  MIDI_CC_JOYSTICK_2_X = 13,
+  MIDI_CC_JOYSTICK_2_Y = 14,
+};
+
+static constexpr uint8_t kMidiDefaultChannel = 1;
+static constexpr int16_t kPressureFullScaleCentikpa = 1000;       // 10.00 kPa
+static constexpr int16_t kFlywheelFullScaleTenthRpm = 600;        // 60.0 RPM
+
+struct MidiControlChange {
+  uint8_t control = 0;
+  uint8_t value = 0;
+};
+
 enum class PacketDecodeResult : uint8_t {
   Ok,
   WrongLength,
@@ -116,6 +142,80 @@ inline EncoderReading parseEncoderReading(const ModulePacket &packet) {
   reading.velocityTenthRpm = packet.payload[2];
   reading.direction = packet.payload[3];
   return reading;
+}
+
+inline uint8_t clampMidiValue(int32_t value) {
+  if (value < 0) return 0;
+  if (value > 127) return 127;
+  return static_cast<uint8_t>(value);
+}
+
+inline uint8_t mapUnipolarToMidi(int32_t value, int32_t fullScale) {
+  if (fullScale <= 0) return 0;
+  if (value <= 0) return 0;
+  if (value >= fullScale) return 127;
+  return clampMidiValue((value * 127 + fullScale / 2) / fullScale);
+}
+
+inline uint8_t mapSignedInt16ToMidi(int16_t value) {
+  const int32_t shifted = static_cast<int32_t>(value) + 32768;
+  return clampMidiValue((shifted * 127 + 32767) / 65535);
+}
+
+inline uint8_t mapDirectionToMidi(int16_t direction) {
+  if (direction < 0) return 0;
+  if (direction > 0) return 127;
+  return 64;
+}
+
+inline uint8_t mapVelocityToMidi(int16_t velocityTenthRpm) {
+  const int32_t magnitude =
+      velocityTenthRpm < 0 ? -static_cast<int32_t>(velocityTenthRpm)
+                           : static_cast<int32_t>(velocityTenthRpm);
+  return mapUnipolarToMidi(magnitude, kFlywheelFullScaleTenthRpm);
+}
+
+inline uint8_t mapPressureToMidi(int16_t pressureCentikpa) {
+  return mapUnipolarToMidi(pressureCentikpa, kPressureFullScaleCentikpa);
+}
+
+inline uint8_t loadcellValueToMidi(int16_t value) {
+  return mapSignedInt16ToMidi(value);
+}
+
+inline uint8_t midiChangesForPacket(const ModulePacket &packet,
+                                    MidiControlChange *changes,
+                                    uint8_t capacity) {
+  if (changes == nullptr || capacity == 0 || packet.status != MODULE_STATUS_OK) {
+    return 0;
+  }
+
+  uint8_t count = 0;
+  const auto append = [&](uint8_t control, uint8_t value) {
+    if (count < capacity) {
+      changes[count].control = control;
+      changes[count].value = value;
+      count++;
+    }
+  };
+
+  if (packet.moduleKind == MODULE_KIND_LOADCELL) {
+    const LoadcellReading reading = parseLoadcellReading(packet);
+    append(MIDI_CC_SPRING_TENSION, loadcellValueToMidi(reading.cellA));
+    append(MIDI_CC_SPRING_ACOUSTIC, loadcellValueToMidi(reading.cellB));
+  } else if (packet.moduleKind == MODULE_KIND_PRESSURE) {
+    const PressureReading reading = parsePressureReading(packet);
+    append(MIDI_CC_PNEUMATIC_PRESSURE,
+           mapPressureToMidi(reading.pressureCentikpa));
+  } else if (packet.moduleKind == MODULE_KIND_ENCODER) {
+    const EncoderReading reading = parseEncoderReading(packet);
+    append(MIDI_CC_FLYWHEEL_VELOCITY,
+           mapVelocityToMidi(reading.velocityTenthRpm));
+    append(MIDI_CC_FLYWHEEL_DIRECTION,
+           mapDirectionToMidi(reading.direction));
+  }
+
+  return count;
 }
 
 }  // namespace TeensyMaster
