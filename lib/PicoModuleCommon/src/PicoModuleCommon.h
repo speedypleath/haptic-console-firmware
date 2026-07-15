@@ -48,10 +48,14 @@ class PicoModule {
   }
 
   void publish(ModuleStatus status, const int16_t *values, uint8_t count) {
+    // readIdAdc() must run with interrupts enabled: on the RP2040 Mbed core,
+    // analogRead() depends on the RTOS/interrupts to complete, so calling it
+    // inside the noInterrupts()/interrupts() critical section below deadlocks.
+    const uint16_t idAdc = readIdAdc();
 #ifndef HAPTIC_DEBUG
     noInterrupts();
 #endif
-    PicoCore::publishPacket(packet_, status, readIdAdc(), values, count);
+    PicoCore::publishPacket(packet_, status, idAdc, values, count);
 #ifdef HAPTIC_DEBUG
     printDebug();
     delay(100);

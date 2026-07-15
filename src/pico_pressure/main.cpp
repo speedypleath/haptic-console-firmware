@@ -13,21 +13,27 @@ using namespace Haptic;
 //
 // CALIBRATE: measure PicoPressure::kZeroAdcCount and PicoPressure::kAdcPerKpa
 // with hardware once the divider is fitted.
+//
+// Pins — avoid GP4/5 (I2C), GP6 (IRQ), GP26/A0 (ID/ADC). Sensor output → A1 (GP27).
+static constexpr uint8_t kPressurePin = A1;
 
 PicoModule module(HAPTIC_I2C_ADDRESS, HAPTIC_MODULE_KIND);
 
 void setup() {
-  Serial1.begin(115200);
+  // Serial.begin() does not block waiting for a USB host, unlike guarding
+  // on `while (!Serial)` — module.begin() (Wire.begin()) must run promptly
+  // so the Teensy's one-shot boot-time scan can find this module.
+  Serial.begin(115200);
   analogReadResolution(12);
   module.begin();
 }
 
 void loop() {
-  const int16_t raw = (int16_t)analogRead(A0);
+  const int16_t raw = (int16_t)analogRead(kPressurePin);
 
   int16_t values[kMaxPayloadWords] = {};
   const ModuleStatus status = PicoPressure::buildPayload(raw, values);
-  Serial1.println("pressure=" + String(values[0]) + " raw=" + String(raw) + " status=" + String(status));
+  Serial.println("pressure=" + String(values[0]) + " raw=" + String(raw) + " status=" + String(status));
 
   module.publish(status, values, kMaxPayloadWords);
   delay(20);

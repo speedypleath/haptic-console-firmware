@@ -200,3 +200,33 @@ Keep I2C pullups on the master side where possible, and do not pull `SDA` or
 
 Do not bring up every module at once. The first milestone is one Pico returning
 valid packets to the Teensy.
+
+## Troubleshooting I2C Bring-Up
+
+If a Pico module doesn't show up in the Teensy's boot-time scan, check in this
+order:
+
+1. **Pin conflicts.** `PicoModule` reserves GP4/GP5 (I2C), GP6 (IRQ), and
+   GP26/`A0` (ID/ADDR ADC). A module's own sensor pins must avoid these —
+   `pico_pressure`, for example, reads its sensor on `A1`/GP27, not `A0`.
+2. **Bootloader fallback.** If a Pico enumerates on USB as `RP2 Boot` (vendor
+   ID `0x2E8A`) instead of as a running application, the flash never received
+   a valid image. Reflash by holding BOOTSEL, dragging the built
+   `.pio/build/<env>/firmware.uf2` onto the `RPI-RP2` mass-storage drive that
+   appears, and confirm with `pio device list` that it comes back as a normal
+   device afterward instead of `RP2 Boot`.
+3. **`noInterrupts()`/`interrupts()` deadlocks on the RP2040 Mbed core.** This
+   project builds Pico targets against `framework-arduino-mbed` (Arduino's
+   official Mbed OS-based RP2040 core), not the community `arduino-pico`
+   core. On this core, calling `analogRead()` (or anything else that depends
+   on the RTOS/interrupts) inside a `noInterrupts()`/`interrupts()` critical
+   section hangs forever. `PicoModule::publish()` reads the ID ADC *before*
+   entering the critical section for this reason — keep any future critical
+   sections in `PicoModuleCommon.h` limited to plain memory writes.
+4. **Boot-order race.** `teensy_master`'s `scanModules()` runs once, about
+   500 ms after the Teensy's own reset, and a module not found there is never
+   rescanned (no periodic retry). Anything in a Pico's `setup()` that can
+   block past that window — a `while (!Serial)` wait for a USB host, or
+   `pico_loadcell`'s up-to-6-second HX711 stabilization loop — risks the
+   module missing the scan and being marked permanently inactive until the
+   Teensy is reset again. Don't block `setup()` on USB host presence.
