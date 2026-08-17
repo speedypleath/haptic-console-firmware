@@ -55,7 +55,7 @@ This is a PlatformIO multi-environment firmware workspace. One Teensy 4.0 acts a
 ## Current State of Each Module
 
 - `teensy_master`: polls all three addresses at 10 ms intervals; prints packets over serial. No MIDI/OSC/CV output yet.
-- `pico_loadcell`: publishes dummy `analogRead(A0/A1)` values. HX711 driver not yet written.
+- `pico_loadcell`: reads two `HX711_ADC` (olkal/HX711_ADC) load cells on GP10/11 (channel A) and GP12/13 (channel B), runs `startMultiple()` for parallel stabilization/tare at boot, and publishes signed readings via `PicoLoadcell::buildPayload()`. `statusForTimeoutFlags()` reports `MODULE_STATUS_SENSOR_FAULT` if either HX711 times out. Calibration factor (`kCalFactor` in `src/pico_loadcell/main.cpp`) is still a placeholder (`1.0f`) — needs `getNewCalibration()` against a known mass.
 - `pico_pressure`: reads MPX5010DP gauge pressure sensor (0–10 kPa) via A0. Voltage divider conditioning stage not yet designed; calibration constants (`kZeroAdcCount`, `kAdcPerKpa`) are placeholders.
 - `pico_encoder`: polling quadrature decoder on GP14/GP15; position split across `payload[0]` (low word) and `payload[1]` (high word). Interrupt-based decode not yet implemented.
 

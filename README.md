@@ -171,6 +171,26 @@ events. The current `USB_MIDI_SERIAL` firmware is a USB MIDI 1.0-compatible
 transport, so it emits the mappings above in MIDI 1.0 form until a USB MIDI
 2.0 UMP transport and endpoint discovery are implemented.
 
+## Load Cell (HX711) Wiring
+
+Confirmed working configuration for `pico_loadcell`:
+
+- HX711 `VCC` → Pico `5V`/`VBUS` (not 3.3V), HX711 `GND` → Pico `GND`.
+- Load cell A: `DOUT`/`DT` → Pico GP10, `SCK` → Pico GP11.
+- Load cell B: `DOUT`/`DT` → Pico GP12, `SCK` → Pico GP13.
+
+Load cell (5-wire, with shield) to HX711 bridge inputs:
+
+| Load cell wire | HX711 pin |
+|---|---|
+| Red | `E+` |
+| Black | `E-` |
+| Green | `A+` |
+| White | `A-` |
+| Yellow (shield) | `E-` (or board `GND`) |
+
+`B+`/`B-` on the HX711 board are unused (second internal bridge channel).
+
 ## Connector Assumptions
 
 The firmware assumes the Haptic Console 8-pin module connector:
