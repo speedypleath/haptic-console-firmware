@@ -57,6 +57,55 @@ static constexpr uint8_t kMidiDefaultChannel = 1;
 static constexpr int16_t kPressureFullScaleCentikpa = 1000;       // 10.00 kPa
 static constexpr int16_t kFlywheelFullScaleTenthRpm = 600;        // 60.0 RPM
 
+// Panel/numpad lane (README "Numpad and panel buttons"): momentary Note
+// On/Off on a dedicated channel so panel events can never be mistaken for
+// the continuous CC lane above.
+static constexpr uint8_t kMidiPanelChannel = 16;
+static constexpr uint8_t kMidiNoteNumpadBase = 36;   // digits 0-9 -> 36-45
+static constexpr uint8_t kMidiNoteActionBase = 46;   // action buttons 1-8 -> 46-53
+static constexpr uint8_t kMidiNoteControlBase = 54;  // control buttons 1-5 -> 54-58
+static constexpr uint8_t kMidiNoteVelocity = 127;
+
+// Minimum time a raw digital reading must hold steady before it is accepted
+// as a real press/release, to reject switch-contact bounce.
+static constexpr uint32_t kDebounceMs = 20;
+
+enum class InputEdge : uint8_t { None, Pressed, Released };
+
+struct DebouncedInput {
+  bool stablePressed = false;
+  bool lastRawPressed = false;
+  uint32_t lastChangeMs = 0;
+};
+
+// Pure debounce policy shared by every panel input (arcade buttons, joystick
+// direction switches, numpad matrix keys) so it can be exercised host-side
+// without any Arduino GPIO calls.
+inline InputEdge updateDebouncedInput(DebouncedInput &input, bool rawPressed,
+                                      uint32_t nowMs) {
+  if (rawPressed != input.lastRawPressed) {
+    input.lastRawPressed = rawPressed;
+    input.lastChangeMs = nowMs;
+  }
+
+  if (rawPressed != input.stablePressed &&
+      (nowMs - input.lastChangeMs) >= kDebounceMs) {
+    input.stablePressed = rawPressed;
+    return rawPressed ? InputEdge::Pressed : InputEdge::Released;
+  }
+
+  return InputEdge::None;
+}
+
+// Maps a numpad matrix keymap character ('0'-'9') to its README-mapped MIDI
+// note. Non-digit keys (e.g. '*', '#' on a 4x3 phone-style matrix) return
+// false since they have no defined panel mapping yet.
+inline bool numpadNoteForKey(char key, uint8_t &note) {
+  if (key < '0' || key > '9') return false;
+  note = static_cast<uint8_t>(kMidiNoteNumpadBase + (key - '0'));
+  return true;
+}
+
 struct MidiControlChange {
   uint8_t control = 0;
   uint8_t value = 0;

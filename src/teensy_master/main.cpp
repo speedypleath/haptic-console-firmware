@@ -11,6 +11,153 @@ static uint32_t    lastPollMs  = 0;
 static bool        debugOutput = true;
 static TM::MidiControlChangeCache midiCache;
 
+// ---------------------------------------------------------------------------
+// Panel input bring-up harness: arcade buttons, a 5-pin joystick, and a
+// numpad matrix wired directly to the Teensy for wiring/debounce validation
+// ahead of the real panel loom. All switches are wired common-to-GND and read
+// with internal pullups (pressed = LOW). Remove once the real panel loom
+// replaces this harness.
+//
+// Arcade button, 2-pin (switch only).
+static constexpr uint8_t kArcade2PinSwitchPin = 2;
+//
+// Arcade button, 4-pin (switch + LED). LED lights while the switch is held.
+static constexpr uint8_t kArcade4PinSwitchPin = 3;
+static constexpr uint8_t kArcade4PinLedPin = 4;
+//
+// Joystick, 5-pin (common + 4 microswitch directions). Digital directions
+// only print for now — the README's joystick CC lane expects a continuous
+// axis, which this discrete harness does not attempt to synthesize.
+static constexpr uint8_t kJoystickUpPin = 5;
+static constexpr uint8_t kJoystickDownPin = 6;
+static constexpr uint8_t kJoystickLeftPin = 7;
+static constexpr uint8_t kJoystickRightPin = 8;
+//
+// Numpad, 4x3 matrix (rows driven, columns read with pullups).
+static constexpr uint8_t kNumpadRowPins[4] = {9, 10, 11, 12};
+static constexpr uint8_t kNumpadColPins[3] = {14, 15, 16};
+static constexpr char kNumpadKeymap[4][3] = {
+    {'1', '2', '3'},
+    {'4', '5', '6'},
+    {'7', '8', '9'},
+    {'*', '0', '#'},
+};
+
+static TM::DebouncedInput arcade2PinInput;
+static TM::DebouncedInput arcade4PinInput;
+static bool arcade4PinLedLatched = false;
+static TM::DebouncedInput joystickUpInput;
+static TM::DebouncedInput joystickDownInput;
+static TM::DebouncedInput joystickLeftInput;
+static TM::DebouncedInput joystickRightInput;
+static TM::DebouncedInput numpadInputs[4][3];
+
+void setUpPanelTestHarness() {
+  pinMode(kArcade2PinSwitchPin, INPUT_PULLUP);
+  pinMode(kArcade4PinSwitchPin, INPUT_PULLUP);
+  pinMode(kArcade4PinLedPin, OUTPUT);
+  digitalWrite(kArcade4PinLedPin, LOW);
+
+  pinMode(kJoystickUpPin, INPUT_PULLUP);
+  pinMode(kJoystickDownPin, INPUT_PULLUP);
+  pinMode(kJoystickLeftPin, INPUT_PULLUP);
+  pinMode(kJoystickRightPin, INPUT_PULLUP);
+
+  for (uint8_t row = 0; row < 4; ++row) {
+    pinMode(kNumpadRowPins[row], OUTPUT);
+    digitalWrite(kNumpadRowPins[row], HIGH);
+  }
+  for (uint8_t col = 0; col < 3; ++col) {
+    pinMode(kNumpadColPins[col], INPUT_PULLUP);
+  }
+}
+
+void sendPanelNote(uint8_t note, TM::InputEdge edge) {
+#if defined(USB_MIDI) || defined(USB_MIDI_SERIAL)
+  if (edge == TM::InputEdge::Pressed) {
+    usbMIDI.sendNoteOn(note, TM::kMidiNoteVelocity, TM::kMidiPanelChannel);
+  } else if (edge == TM::InputEdge::Released) {
+    usbMIDI.sendNoteOff(note, 0, TM::kMidiPanelChannel);
+  }
+#else
+  (void)note;
+  (void)edge;
+#endif
+}
+
+void printPanelEdge(const char *label, TM::InputEdge edge) {
+  if (!debugOutput || edge == TM::InputEdge::None) return;
+  Serial.print(label);
+  Serial.println(edge == TM::InputEdge::Pressed ? " pressed" : " released");
+}
+
+void pollArcadeButtons(uint32_t now) {
+  const TM::InputEdge edge2Pin = TM::updateDebouncedInput(
+      arcade2PinInput, digitalRead(kArcade2PinSwitchPin) == LOW, now);
+  printPanelEdge("arcade2pin", edge2Pin);
+  sendPanelNote(TM::kMidiNoteActionBase, edge2Pin);
+
+  const TM::InputEdge edge4Pin = TM::updateDebouncedInput(
+      arcade4PinInput, digitalRead(kArcade4PinSwitchPin) == LOW, now);
+  printPanelEdge("arcade4pin", edge4Pin);
+  sendPanelNote(TM::kMidiNoteControlBase, edge4Pin);
+  // Latch: each press toggles the LED on/off; release is ignored for the LED
+  // (the switch itself is still momentary and keeps sending MIDI normally).
+  if (edge4Pin == TM::InputEdge::Pressed) {
+    arcade4PinLedLatched = !arcade4PinLedLatched;
+    digitalWrite(kArcade4PinLedPin, arcade4PinLedLatched ? HIGH : LOW);
+  }
+}
+
+void pollJoystick(uint32_t now) {
+  const TM::InputEdge up = TM::updateDebouncedInput(
+      joystickUpInput, digitalRead(kJoystickUpPin) == LOW, now);
+  const TM::InputEdge down = TM::updateDebouncedInput(
+      joystickDownInput, digitalRead(kJoystickDownPin) == LOW, now);
+  const TM::InputEdge left = TM::updateDebouncedInput(
+      joystickLeftInput, digitalRead(kJoystickLeftPin) == LOW, now);
+  const TM::InputEdge right = TM::updateDebouncedInput(
+      joystickRightInput, digitalRead(kJoystickRightPin) == LOW, now);
+  printPanelEdge("joystick up", up);
+  printPanelEdge("joystick down", down);
+  printPanelEdge("joystick left", left);
+  printPanelEdge("joystick right", right);
+}
+
+void pollNumpad(uint32_t now) {
+  for (uint8_t row = 0; row < 4; ++row) {
+    digitalWrite(kNumpadRowPins[row], LOW);
+    delayMicroseconds(5);  // let the driven row settle before sampling columns
+
+    for (uint8_t col = 0; col < 3; ++col) {
+      const bool pressed = digitalRead(kNumpadColPins[col]) == LOW;
+      const TM::InputEdge edge =
+          TM::updateDebouncedInput(numpadInputs[row][col], pressed, now);
+      if (edge == TM::InputEdge::None) continue;
+
+      const char key = kNumpadKeymap[row][col];
+      if (debugOutput) {
+        Serial.print("numpad ");
+        Serial.print(key);
+        Serial.println(edge == TM::InputEdge::Pressed ? " pressed" : " released");
+      }
+
+      uint8_t note = 0;
+      if (TM::numpadNoteForKey(key, note)) {
+        sendPanelNote(note, edge);
+      }
+    }
+
+    digitalWrite(kNumpadRowPins[row], HIGH);
+  }
+}
+
+void pollPanelTestHarness(uint32_t now) {
+  pollArcadeButtons(now);
+  pollJoystick(now);
+  pollNumpad(now);
+}
+
 bool readModule(uint8_t address, ModulePacket &packet) {
   const uint8_t expected = sizeof(ModulePacket);
   const uint8_t received = Wire.requestFrom(address, expected);
@@ -103,6 +250,7 @@ void setup() {
   delay(500);
   Serial.println("Haptic Console Teensy master");
   Serial.println("Serial commands: 'd' = toggle debug output");
+  setUpPanelTestHarness();
   scanModules();
 }
 
@@ -116,6 +264,8 @@ void loop() {
   }
 
   const uint32_t now = millis();
+  pollPanelTestHarness(now);
+
   if (!TM::isPollDue(now, lastPollMs)) return;
   lastPollMs = now;
 

@@ -282,6 +282,44 @@ void test_midi_control_change_cache_sends_initial_and_changed_values() {
   TEST_ASSERT_FALSE(TM::shouldSendMidiControlChange(cache, 128, 64));
 }
 
+void test_debounce_ignores_bounce_within_window() {
+  TM::DebouncedInput input{};
+
+  TEST_ASSERT_TRUE(TM::updateDebouncedInput(input, true, 0) == TM::InputEdge::None);
+  // Bounces back to released before the debounce window elapses.
+  TEST_ASSERT_TRUE(TM::updateDebouncedInput(input, false, 5) == TM::InputEdge::None);
+  TEST_ASSERT_TRUE(TM::updateDebouncedInput(input, true, 8) == TM::InputEdge::None);
+  TEST_ASSERT_FALSE(input.stablePressed);
+}
+
+void test_debounce_reports_press_and_release_edges_once_settled() {
+  TM::DebouncedInput input{};
+
+  TEST_ASSERT_TRUE(TM::updateDebouncedInput(input, true, 0) == TM::InputEdge::None);
+  TEST_ASSERT_TRUE(TM::updateDebouncedInput(input, true, TM::kDebounceMs) ==
+                    TM::InputEdge::Pressed);
+  TEST_ASSERT_TRUE(input.stablePressed);
+  // Steady state: no repeated edges while held.
+  TEST_ASSERT_TRUE(TM::updateDebouncedInput(input, true, TM::kDebounceMs + 50) ==
+                    TM::InputEdge::None);
+
+  TEST_ASSERT_TRUE(TM::updateDebouncedInput(input, false, 1000) == TM::InputEdge::None);
+  TEST_ASSERT_TRUE(TM::updateDebouncedInput(input, false, 1000 + TM::kDebounceMs) ==
+                    TM::InputEdge::Released);
+  TEST_ASSERT_FALSE(input.stablePressed);
+}
+
+void test_numpad_note_maps_digits_and_rejects_non_digits() {
+  uint8_t note = 0;
+
+  TEST_ASSERT_TRUE(TM::numpadNoteForKey('0', note));
+  TEST_ASSERT_EQUAL_UINT8(36, note);
+  TEST_ASSERT_TRUE(TM::numpadNoteForKey('9', note));
+  TEST_ASSERT_EQUAL_UINT8(45, note);
+  TEST_ASSERT_FALSE(TM::numpadNoteForKey('*', note));
+  TEST_ASSERT_FALSE(TM::numpadNoteForKey('#', note));
+}
+
 int main(int argc, char **argv) {
   (void)argc;
   (void)argv;

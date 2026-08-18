@@ -108,6 +108,24 @@ pio run -e pico_pressure_debug
 pio run -e pico_encoder_debug
 ```
 
+## Teensy Panel Input Bring-Up Harness
+
+`teensy_master` includes a GPIO test harness (`setUpPanelTestHarness()` /
+`pollPanelTestHarness()` in `src/teensy_master/main.cpp`) for validating
+arcade buttons, a joystick, and a numpad wired directly to the Teensy, ahead
+of the real panel loom. All switches are wired common-to-`GND` and read with
+internal pullups. Debug prints follow the existing `'d'` toggle; button and
+numpad presses also emit MIDI Note On/Off on the panel channel/notes
+documented above. This is bring-up scaffolding, not the final panel driver —
+remove it once the real panel loom and matrix are in place.
+
+| Input | Pins | Notes |
+|---|---|---|
+| Arcade button, 2-pin | switch → `2` | MIDI note = `kMidiNoteActionBase` (46) |
+| Arcade button, 4-pin | switch → `3`, LED → `4` | MIDI note = `kMidiNoteControlBase` (54); LED lights while held |
+| Joystick, 5-pin | up `5`, down `6`, left `7`, right `8` | Serial print only — no CC synthesis from discrete switches |
+| Numpad, 4x3 matrix | rows `9,10,11,12`, cols `14,15,16` | Keymap `1-9,*,0,#`; only digits `0`-`9` send MIDI notes (36–45) |
+
 ## I2C Module Addresses
 
 - `0x20`: load-cell module
